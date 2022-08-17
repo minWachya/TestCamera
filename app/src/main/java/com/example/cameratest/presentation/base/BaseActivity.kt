@@ -1,4 +1,4 @@
-package com.example.cameratest.presentation
+package com.example.cameratest.presentation.base
 
 import android.os.Bundle
 import androidx.annotation.LayoutRes
