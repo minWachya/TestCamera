@@ -1,72 +1,142 @@
 package com.example.cameratest.presentation.customcamera
 
-import android.graphics.BitmapFactory
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.ImageFormat
+import android.hardware.camera2.*
+import android.media.ImageReader
+import android.os.Build
 import android.os.Bundle
-import android.view.SurfaceHolder
-import android.view.SurfaceView
-import android.view.View
+import android.os.Handler
+import android.os.HandlerThread
+import android.util.Log
+import android.view.*
+import android.widget.Toast
+import androidx.annotation.RequiresApi
+import androidx.core.app.ActivityCompat
 import com.example.cameratest.R
 import com.example.cameratest.databinding.ActivityCustomCameraBinding
 import com.example.cameratest.presentation.base.BaseActivity
 
+class CustomCameraActivity: BaseActivity<ActivityCustomCameraBinding>(R.layout.activity_custom_camera) {
+    private var mHandler: Handler? = null
+    private lateinit var mPreviewBuilder: CaptureRequest.Builder
+    private lateinit var mImageReader: ImageReader
+    private lateinit var mCameraDevice: CameraDevice
 
-class CustomCameraActivity: BaseActivity<ActivityCustomCameraBinding>(R.layout.activity_custon_camera) {
-    // 2. 그다음 시작하는게 onCreate. Activity 생성시 잴 먼저 실행된다.
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-//        requestWindowFeature(Window.FEATURE_NO_TITLE)
-//        setContentView(R.layout.cameratest)
-//        imageview = findViewById<View>(R.id.imageView1) as ImageView
-//        surfaceView = findViewById<View>(R.id.surfaceView1) as SurfaceView
-//        surfaceHolder = surfaceView.getHolder()
-//        surfaceHolder.addCallback(surfaceListener)
-        binding.btnTakePhoto.setOnClickListener(
-//            if (camera != null && inProgress === false) {
-//                camera.takePicture(null, null, takePicture)
-//                inProgress = true
-//            }
+        // 화면 켜짐 유지
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        )
+
+        initView()
+    }
+
+    private fun initView() {
+        binding.surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) {
+                initCameraAndPreview()
+            }
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                mCameraDevice.close()
+            }
+            override fun surfaceChanged(
+                holder: SurfaceHolder, format: Int,
+                width: Int, height: Int,
+            ) { }
+        })
+    }
+
+    private fun initCameraAndPreview() {
+        val handlerThread = HandlerThread("CAMERA2")
+        handlerThread.start()
+        mHandler = Handler(handlerThread.looper)
+        openCamera()
+    }
+
+    private fun openCamera() {
+        try {
+            val mCameraManager = this.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val characteristics = mCameraManager.getCameraCharacteristics("0")
+            val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+
+            val largestPreviewSize = map!!.getOutputSizes(ImageFormat.JPEG)[0]
+
+            mImageReader = ImageReader.newInstance(
+                largestPreviewSize.width,
+                largestPreviewSize.height,
+                ImageFormat.JPEG,
+                7
+            )
+            if (ActivityCompat.checkSelfPermission(this@CustomCameraActivity, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED
+            ) return
+
+            mCameraManager.openCamera("0", deviceStateCallback, mHandler)
+        } catch (e: CameraAccessException) {
+            Log.d("mmm", "카메라를 열지 못했습니다.")
+        }
+    }
+
+    private val deviceStateCallback = object : CameraDevice.StateCallback() {
+        override fun onOpened(camera: CameraDevice) {
+            mCameraDevice = camera
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                    takePreview()
+            } catch (e: CameraAccessException) {
+                e.printStackTrace()
+            }
+        }
+
+        override fun onDisconnected(camera: CameraDevice) {
+            mCameraDevice.close()
+        }
+
+        override fun onError(camera: CameraDevice, error: Int) {
+            Log.d("mmm", "카메라를 열지 못했습니다.")
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.P)
+    @Throws(CameraAccessException::class)
+    private fun takePreview() {
+        mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+        mPreviewBuilder.addTarget(binding.surfaceView.holder.surface)
+
+        mCameraDevice.createCaptureSession(
+            listOf(binding.surfaceView.holder.surface, mImageReader.surface), mSessionPreviewStateCallback, mHandler
         )
     }
 
+    private val mSessionPreviewStateCallback = object : CameraCaptureSession.StateCallback() {
+        override fun onConfigured(session: CameraCaptureSession) {
+            try {
+                // Key-Value 구조로 설정
+                // 오토포커싱이 계속 동작
+                mPreviewBuilder.set(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                )
+                //필요할 경우 플래시가 자동으로 켜짐
+                mPreviewBuilder.set(
+                    CaptureRequest.CONTROL_AE_MODE,
+                    CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
+                )
+                session.setRepeatingRequest(mPreviewBuilder.build(), null, mHandler)
+            } catch (e: CameraAccessException) {
+                e.printStackTrace()
+            }
 
-//    private val takePicture: PictureCallback = object : PictureCallback() {
-//        fun onPictureTaken(data: ByteArray?, camera: Camera) {
-//            // TODO Auto-generated method stub
-//            Log.i(TAG, "샷다 누름 확인")
-//            if (data != null) Log.i(TAG, "JPEG 사진 찍었음!")
-//            val bitmap = BitmapFactory.decodeByteArray(data, 0, data!!.size)
-//            imageview.setImageBitmap(bitmap)
-//            camera.startPreview()
-//            inProgress = false
-//        }
-//    }
-//
-//    private val surfaceListener: SurfaceHolder.Callback = object : SurfaceHolder.Callback {
-//        override fun surfaceDestroyed(holder: SurfaceHolder) {
-//            // TODO Auto-generated method stub
-//            camera.release()
-//            camera = null
-//            Log.i(TAG, "카메라 기능 해제")
-//        }
-//
-//        override fun surfaceCreated(holder: SurfaceHolder) {
-//            // TODO Auto-generated method stub
-//            camera = Camera.open()
-//            Log.i(TAG, "카메라 미리보기 활성")
-//            try {
-//                camera.setPreviewDisplay(holder)
-//            } catch (e: Exception) {
-//                e.printStackTrace()
-//            }
-//        }
-//
-//        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-//            // TODO Auto-generated method stub
-//            val parameters: Camera.Parameters = camera.getParameters()
-//            parameters.setPreviewSize(width, height)
-//            camera.startPreview()
-//            Log.i(TAG, "카메라 미리보기 활성")
-//        }
-//    }
+        }
+
+        override fun onConfigureFailed(session: CameraCaptureSession) {
+            Toast.makeText(this@CustomCameraActivity, "카메라 구성 실패", Toast.LENGTH_SHORT).show()
+        }
+    }
 }
