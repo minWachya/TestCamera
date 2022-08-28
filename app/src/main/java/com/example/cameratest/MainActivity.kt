@@ -20,7 +20,8 @@ class MainActivity : BaseActivity<ActivityMainBinding>(R.layout.activity_main) {
     // 권한 묻기
     private fun checkPermission() {
         TedPermission.create()
-            .setPermissions(Manifest.permission.CAMERA)
+            .setPermissions(Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE)
             .setPermissionListener(object : PermissionListener {
                 override fun onPermissionGranted() {
                     Toast.makeText(applicationContext, "권한 허용", Toast.LENGTH_SHORT).show()

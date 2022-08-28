@@ -12,7 +12,7 @@
         android:background="#ffd5d5">
 
         <SurfaceView
-            android:id="@+id/surfaceView"
+            android:id="@+id/surface_view"
             android:layout_width="0dp"
             android:layout_height="300dp"
             app:layout_constraintBottom_toBottomOf="parent"
@@ -32,13 +32,37 @@
             app:layout_constraintStart_toStartOf="parent" />
 
         <TextView
+            android:id="@+id/tv_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="안녕하세요."
+            android:layout_marginTop="20dp"
+            android:text="사진을 찍어보세요!"
             android:textColor="@color/white"
+            android:textSize="32sp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+
+        <ImageView
+            android:id="@+id/iv_photo"
+            android:layout_width="100dp"
+            android:layout_height="0dp"
+            android:layout_margin="20dp"
+            app:layout_constraintBottom_toTopOf="@id/surface_view"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tv_title" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="&lt;방금 찍은 사진은\n여기에 보입니다."
+            android:textColor="@color/white"
+            android:textSize="24sp"
+            app:layout_constraintTop_toTopOf="@id/iv_photo"
+            app:layout_constraintEnd_toEndOf="parent"
+            android:layout_marginEnd="20dp"
+            app:layout_constraintBottom_toBottomOf="@id/iv_photo"/>
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>
