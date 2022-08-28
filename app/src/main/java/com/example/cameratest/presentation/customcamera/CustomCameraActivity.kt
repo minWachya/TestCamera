@@ -10,7 +10,6 @@ import android.graphics.Matrix
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
-import android.net.Uri
 import android.os.*
 import android.util.Log
 import android.view.*
@@ -31,13 +30,9 @@ class CustomCameraActivity: BaseActivity<ActivityCustomCameraBinding>(R.layout.a
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         // 화면 켜짐 유지
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        )
-
+        window.setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         initView()
         setBtnTakePhotoClickListener()
     }
@@ -84,8 +79,7 @@ class CustomCameraActivity: BaseActivity<ActivityCustomCameraBinding>(R.layout.a
                 7
             )
             if (ActivityCompat.checkSelfPermission(this@CustomCameraActivity, Manifest.permission.CAMERA)
-                != PackageManager.PERMISSION_GRANTED
-            ) return
+                != PackageManager.PERMISSION_GRANTED) return
             mCameraManager.openCamera("0", deviceStateCallback, mHandler)
         } catch (e: CameraAccessException) {
             Log.d("mmm", "카메라를 열지 못했습니다.")
@@ -116,10 +110,61 @@ class CustomCameraActivity: BaseActivity<ActivityCustomCameraBinding>(R.layout.a
     private fun takePreview() {
         mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
         mPreviewBuilder.addTarget(binding.surfaceView.holder.surface)
-        mCameraDevice.createCaptureSession(
-            listOf(binding.surfaceView.holder.surface, mImageReader.surface), mSessionPreviewStateCallback, mHandler
-        )
+        val outputSurface = arrayListOf<Surface>(binding.surfaceView.holder.surface, mImageReader.surface)
+        mCameraDevice.createCaptureSession(outputSurface, mSessionPreviewStateCallback, mHandler)
     }
+
+    // 사진찍을 때 호출하는 메서드
+    private fun takePicture() {
+        try {
+            // 이미지 저장하고, 화면에 띄우기
+            saveImageFile()
+            // mSessionPreviewStateCallback2를 통해 이미지 캡쳐 후 카메라 미리보기 세션 재시작
+            val outputSurface = arrayListOf<Surface>(mImageReader.surface)
+            mCameraDevice.createCaptureSession(outputSurface, mSessionPreviewStateCallback2, null)
+        } catch (e: CameraAccessException) {
+            e.printStackTrace()
+        }
+    }
+
+    // 이미지 저장하고 화면에 띄우는 메소드
+    private fun saveImageFile() {
+        // 캡쳐한 이미지를 저장할 파일 생성
+        val file = File(Environment.getExternalStorageDirectory().toString() + "/pic${fileCount}.jpg")
+        val readerListener = ImageReader.OnImageAvailableListener {
+            var image : Image? = null
+            try {
+                image = mImageReader.acquireLatestImage()
+                val buffer = image!!.planes[0].buffer
+                val bytes = ByteArray(buffer.capacity())
+                buffer.get(bytes)
+                var output: OutputStream? = null
+                try {
+                    output = FileOutputStream(file)
+                    output.write(bytes)
+                } finally {
+                    output?.close()
+                    // 촬영한 이미지 화면에 띄우기
+                    val bitmap: Bitmap = BitmapFactory.decodeFile(file.path)
+                    val rotateMatrix = Matrix() // 비트맵 사진이 90도 돌아가있는 문제를 해결하기 위해 90도 rotate
+                    rotateMatrix.postRotate(90F)
+                    val rotatedBitmap: Bitmap = Bitmap.createBitmap(bitmap, 0,0, bitmap.width, bitmap.height, rotateMatrix, false)
+                    binding.ivPhoto.setImageBitmap(rotatedBitmap)
+
+                    fileCount++
+                }
+            } catch (e: FileNotFoundException) {
+                e.printStackTrace()
+            } catch (e: IOException) {
+                e.printStackTrace()
+            } finally {
+                image?.close()
+            }
+        }
+        // 이미지 저장
+        mImageReader.setOnImageAvailableListener(readerListener, null)
+    }
+
     // 미리보기 콜백
     private val mSessionPreviewStateCallback = object : CameraCaptureSession.StateCallback() {
         override fun onConfigured(session: CameraCaptureSession) {
@@ -136,72 +181,31 @@ class CustomCameraActivity: BaseActivity<ActivityCustomCameraBinding>(R.layout.a
             Toast.makeText(this@CustomCameraActivity, "카메라 구성 실패", Toast.LENGTH_SHORT).show()
         }
     }
-
-    // 사진찍을 때 호출하는 메서드
-    private fun takePicture() {
-        try {
-            val outputSurface = arrayListOf<Surface>(mImageReader.surface)
-            val captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            captureBuilder.addTarget(mImageReader.surface)
-            captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-            val file = File(Environment.getExternalStorageDirectory().toString() + "/pic${fileCount}.jpg")
-
-            // 캡쳐 파일 저장
-            val readerListener = ImageReader.OnImageAvailableListener {
-                var image : Image? = null
-                try {
-                    image = mImageReader.acquireLatestImage()
-                    val buffer = image!!.planes[0].buffer
-                    val bytes = ByteArray(buffer.capacity())
-                    buffer.get(bytes)
-                    var output: OutputStream? = null
-                    try {
-                        output = FileOutputStream(file)
-                        output.write(bytes)
-                    } finally {
-                        output?.close()
-                        val uri = Uri.fromFile(file)
-                        Log.d("mmm", "uri 제대로 잘 바뀌었는지 확인 ${uri}")
-                        // 프리뷰 이미지에 set 해줄 비트맵을 만들어준다
-                        val bitmap: Bitmap = BitmapFactory.decodeFile(file.path)
-                        // 비트맵 사진이 90도 돌아가있는 문제를 해결하기 위해 rotate 해준다
-                        val rotateMatrix = Matrix()
-                        rotateMatrix.postRotate(90F)
-                        val rotatedBitmap: Bitmap = Bitmap.createBitmap(bitmap, 0,0, bitmap.width, bitmap.height, rotateMatrix, false)
-                        // 90도 돌아간 비트맵을 이미지뷰에 set 해준다
-                        binding.ivPhoto.setImageBitmap(rotatedBitmap)
-                        fileCount++
-                    }
-                } catch (e: FileNotFoundException) {
-                    e.printStackTrace()
-                } catch (e: IOException) {
-                    e.printStackTrace()
-                } finally {
-                    image?.close()
-                }
+    // 이미지 캡쳐 후 카메라 미리보기 재시작
+    private val mSessionPreviewStateCallback2 = object : CameraCaptureSession.StateCallback() {
+        override fun onConfigured(session: CameraCaptureSession) {
+            try {
+                // 캡쳐하기
+                val captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
+                captureBuilder.addTarget(mImageReader.surface)
+                captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
+                session.capture(captureBuilder.build(), captureListener, null)
+                // 미리보기 재시작
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) takePreview()
+            } catch (e: CameraAccessException) {
+                e.printStackTrace()
             }
-            // imageReader 객체에 위에서 만든 readerListener 를 달아서, 이미지가 사용가능하면 사진을 저장한다
-            mImageReader.setOnImageAvailableListener(readerListener, null)
-            val captureListener = object : CameraCaptureSession.CaptureCallback() {
-                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                    super.onCaptureCompleted(session, request, result)
-                    Toast.makeText(applicationContext, "사진이 촬영되었습니다", Toast.LENGTH_SHORT).show()
-                }
-            }
-            // outputSurface 에 위에서 만든 captureListener 를 달아, 캡쳐(사진 찍기) 해주고 나서 카메라 미리보기 세션을 재시작한다
-            mCameraDevice.createCaptureSession(outputSurface, object : CameraCaptureSession.StateCallback() {
-                override fun onConfigureFailed(session: CameraCaptureSession) {}
-                override fun onConfigured(session: CameraCaptureSession) {
-                    try {
-                        session.capture(captureBuilder.build(), captureListener, null)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) takePreview()
-                    } catch (e: CameraAccessException) {
-                        e.printStackTrace()
-                    }
-                }
-            }, null)
-        } catch (e: CameraAccessException) {
-            e.printStackTrace()
+        }
+        override fun onConfigureFailed(session: CameraCaptureSession) {
+            Toast.makeText(this@CustomCameraActivity, "카메라 구성 실패", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 캡쳐 리스너
+    private val captureListener = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            super.onCaptureCompleted(session, request, result)
+            Toast.makeText(applicationContext, "사진이 촬영되었습니다", Toast.LENGTH_SHORT).show()
         }
     }
 
